@@ -2,7 +2,7 @@
 
 一个用于学习 FastAPI 分层、数据库、Redis 缓存和 Docker 打包的最小后端项目。
 
-当前进度：**Phase 0.1 框架骨架**
+当前进度：**Phase 0.2 数据库接入**
 
 ## 技术栈
 
@@ -27,6 +27,7 @@ uvicorn app.main:app --reload --port 8000
 
 - [架构蓝图](docs/architecture-blueprint.md)
 - [01 · 框架骨架](docs/01-framework.md)
+- [02 · 数据库接入](docs/02-database.md)
 
 ## 目录
 
@@ -34,9 +35,12 @@ uvicorn app.main:app --reload --port 8000
 app/
 ├── main.py              # 应用入口
 ├── config.py            # 配置
+├── database.py          # engine / Session / get_db / init_db
 ├── logging_config.py    # 日志
 └── routers/
     └── health.py        # 健康检查
+data/
+└── app.db               # SQLite 数据文件（自动生成，不提交）
 scripts/
 └── smoke_test.py        # 可选的启动冒烟检查
 ```

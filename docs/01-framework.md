@@ -21,12 +21,14 @@
 
 ## 2. 环境说明
 
-| 项目 | 值 |
-| --- | --- |
-| Conda 环境 | `test` |
-| Python | 3.11.15 |
-| SQLite | 3.51.2（Python 内置，不需要 Docker 镜像） |
-| 已安装 | fastapi 0.162.0、uvicorn 0.54.0、pydantic-settings 2.16.1 |
+
+| 项目       | 值                                                       |
+| -------- | ------------------------------------------------------- |
+| Conda 环境 | `test`                                                  |
+| Python   | 3.11.15                                                 |
+| SQLite   | 3.51.2（Python 内置，不需要 Docker 镜像）                         |
+| 已安装      | fastapi 0.162.0、uvicorn 0.54.0、pydantic-settings 2.16.1 |
+
 
 关于 SQLite 的一个常见误解：
 
@@ -37,6 +39,8 @@
 Docker Desktop 目前没有启动也不影响本模块。到 Redis 模块时再启动 Docker。
 
 ---
+
+
 
 ## 3. 文件清单
 
@@ -59,16 +63,20 @@ a-little-exercise/
 └── README.md
 ```
 
-| 文件 | 负责 | 不负责 |
-| --- | --- | --- |
-| `app/main.py` | 组装应用：创建 app、挂路由、注册生命周期 | 业务逻辑、数据库查询 |
-| `app/config.py` | 读取环境变量和 `.env` | 业务逻辑 |
-| `app/logging_config.py` | 设置日志级别和输出格式 | 记录业务事件 |
-| `app/routers/health.py` | 健康检查接口 | 真正的数据库/Redis 检查（下一阶段加） |
-| `.env` | 本地实际配置 | 被提交到 Git |
-| `requirements.txt` | 运行依赖及版本 | 开发工具依赖 |
+
+| 文件                      | 负责                     | 不负责                    |
+| ----------------------- | ---------------------- | ---------------------- |
+| `app/main.py`           | 组装应用：创建 app、挂路由、注册生命周期 | 业务逻辑、数据库查询             |
+| `app/config.py`         | 读取环境变量和 `.env`         | 业务逻辑                   |
+| `app/logging_config.py` | 设置日志级别和输出格式            | 记录业务事件                 |
+| `app/routers/health.py` | 健康检查接口                 | 真正的数据库/Redis 检查（下一阶段加） |
+| `.env`                  | 本地实际配置                 | 被提交到 Git               |
+| `requirements.txt`      | 运行依赖及版本                | 开发工具依赖                 |
+
 
 ---
+
+
 
 ## 4. 一次请求的链路
 
@@ -92,6 +100,8 @@ APIRouter 中注册的 healthz 函数
         ▼
 HTTP 200 + JSON
 ```
+
+
 
 ### 4.1 Uvicorn 和 FastAPI 的分工
 
@@ -153,7 +163,11 @@ FastAPI 会根据路由函数和类型注解自动生成 OpenAPI 文档：
 
 ---
 
+
+
 ## 5. 关键代码逐段说明
+
+
 
 ### 5.1 配置：`app/config.py`
 
@@ -210,6 +224,8 @@ setup_logging()
 logger = logging.getLogger(__name__)
 ```
 
+
+
 ### 5.3 生命周期：`lifespan`
 
 ```python
@@ -227,6 +243,8 @@ async def lifespan(app: FastAPI):
 本阶段还没有需要初始化的资源，所以只打日志。等数据库和 Redis 模块进来，就会把 engine 和 Redis 客户端的创建/关闭放到这里。
 
 > 注意：直接用 `TestClient(app)` 而不进入上下文管理器时，lifespan 不会执行。用 `with TestClient(app) as client:` 或真实运行 `uvicorn` 才会触发。
+
+
 
 ### 5.4 入口：`app/main.py`
 
@@ -246,6 +264,8 @@ def root() -> dict[str, str]:
 
 ---
 
+
+
 ## 6. 如何运行
 
 在项目根目录执行：
@@ -258,9 +278,9 @@ uvicorn app.main:app --reload --port 8000
 
 打开：
 
-- Swagger 文档：<http://127.0.0.1:8000/docs>
-- 健康检查：<http://127.0.0.1:8000/healthz>
-- 根路径：<http://127.0.0.1:8000/>
+- Swagger 文档：[http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+- 健康检查：[http://127.0.0.1:8000/healthz](http://127.0.0.1:8000/healthz)
+- 根路径：[http://127.0.0.1:8000/](http://127.0.0.1:8000/)
 
 停止：`Ctrl + C`。
 
@@ -277,6 +297,8 @@ conda run -n test uvicorn app.main:app --reload --port 8000
 - 如果 8000 端口被占用，换一个端口，例如 `--port 8001`。
 
 ---
+
+
 
 ## 7. 验证记录
 
@@ -305,6 +327,8 @@ GET /openapi.json  → 路径列表：["/healthz"]
 
 ---
 
+
+
 ## 8. 本模块的边界
 
 现在还没有：
@@ -322,18 +346,22 @@ GET /openapi.json  → 路径列表：["/healthz"]
 
 ---
 
+
+
 ## 9. 常见坑
 
 1. **在错误的目录启动**：找不到 `app` 包或 `.env`。
-2. **把 `.env` 提交到 Git**：里面以后会出现 JWT 密钥等敏感信息。
+2. **把** `.env` **提交到 Git**：里面以后会出现 JWT 密钥等敏感信息。
 3. **忘记安装依赖**：`ModuleNotFoundError: fastapi`。
 4. **端口被占用**：换端口，或找出占用进程。
-5. **以为 `/healthz` 已经检查了数据库**：当前没有，后续才加。
-6. **`--reload` 用在生产**：会多起进程、增加开销，仅开发使用。
+5. **以为** `/healthz` **已经检查了数据库**：当前没有，后续才加。
+6. `--reload` **用在生产**：会多起进程、增加开销，仅开发使用。
 7. **中文日志乱码**：Windows 控制台编码问题，可设置 `PYTHONUTF8=1`。
-8. **直接 `TestClient(app)` 看不到启动日志**：lifespan 没触发，要用上下文管理器。
+8. **直接** `TestClient(app)` **看不到启动日志**：lifespan 没触发，要用上下文管理器。
 
 ---
+
+
 
 ## 10. 自测问题
 
@@ -350,6 +378,8 @@ GET /openapi.json  → 路径列表：["/healthz"]
 
 ---
 
+
+
 ## 11. 动手练习
 
 1. 修改 `.env` 里的 `APP_NAME`，重启应用，观察 `/docs` 标题和 `/healthz` 返回值。
@@ -358,6 +388,8 @@ GET /openapi.json  → 路径列表：["/healthz"]
 4. 故意把 `.env` 里的 `APP_ENV` 改成 `abc`，观察配置校验报错。
 
 ---
+
+
 
 ## 12. 下一个模块：数据库
 

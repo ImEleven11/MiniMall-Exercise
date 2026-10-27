@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.config import get_settings
+from app.database import engine, init_db
 from app.logging_config import setup_logging
 from app.routers import health
 
@@ -17,7 +18,9 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     """应用启动与关闭时执行一次，用来管理进程级资源。"""
     logger.info("应用启动 | name=%s env=%s", settings.app_name, settings.app_env)
+    init_db()
     yield
+    engine.dispose()
     logger.info("应用关闭")
 
 

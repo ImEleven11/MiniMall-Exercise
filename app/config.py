@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     app_name: str = "MiniMall"
     app_env: Literal["dev", "test", "prod"] = "dev"
     log_level: str = "INFO"
+    database_url: str = "sqlite:///./data/app.db"
 
 
 @lru_cache

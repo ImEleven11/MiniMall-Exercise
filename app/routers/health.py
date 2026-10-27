@@ -1,16 +1,36 @@
-from fastapi import APIRouter
+import logging
+
+from fastapi import APIRouter, Response, status
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import get_settings
+from app.database import engine
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["health"])
 
 
 @router.get("/healthz", summary="健康检查")
-def healthz() -> dict[str, str]:
-    """当前阶段只证明应用本身存活；数据库和 Redis 检查会在后续模块加入。"""
+def healthz(response: Response) -> dict[str, object]:
+    """检查应用本身和数据库连接；Redis 检查会在下一个模块加入。"""
     settings = get_settings()
+    database_ok = True
+
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+    except SQLAlchemyError:
+        database_ok = False
+        logger.exception("数据库健康检查失败")
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+
     return {
-        "status": "ok",
+        "status": "ok" if database_ok else "degraded",
         "app": settings.app_name,
         "env": settings.app_env,
+        "components": {
+            "database": "ok" if database_ok else "error",
+        },
     }
