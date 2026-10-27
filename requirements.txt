@@ -1,0 +1,4 @@
+# 运行依赖（版本与 conda test 环境一致）
+fastapi==0.162.0
+uvicorn[standard]==0.54.0
+pydantic-settings==2.16.1

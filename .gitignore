@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# 虚拟环境
+.venv/
+venv/
+
+# 本地配置与数据
+.env
+data/*.db
+data/*.db-*
+uvicorn.log
+
+# 编辑器
+.idea/
+.vscode/
