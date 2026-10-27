@@ -51,9 +51,11 @@ def get_db() -> Generator[Session, None, None]:
 def init_db() -> None:
     """创建数据库文件和表结构。
 
-    当前还没有模型继承 Base，所以只会生成一个空的 app.db。
-    后续 User / Product / Order 加入后，create_all 会自动创建对应表。
+    只有被导入的模型才会注册到 Base.metadata，所以这里先导入 models。
     """
+    # noqa: F401 表示这个导入只为注册模型，变量本身不会被使用。
+    import app.models  # noqa: F401
+
     Base.metadata.create_all(bind=engine)
 
     # 主动建立一次连接，确保数据库文件被创建，同时验证连接可用。

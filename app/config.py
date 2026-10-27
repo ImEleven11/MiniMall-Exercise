@@ -1,6 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,6 +18,11 @@ class Settings(BaseSettings):
     app_env: Literal["dev", "test", "prod"] = "dev"
     log_level: str = "INFO"
     database_url: str = "sqlite:///./data/app.db"
+
+    # JWT 密钥必须由 .env / 环境变量提供，且至少 32 个字符。
+    jwt_secret: str = Field(min_length=32)
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 60
 
 
 @lru_cache

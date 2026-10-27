@@ -1,12 +1,14 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 from app.database import engine, init_db
+from app.exceptions import AppError
 from app.logging_config import setup_logging
-from app.routers import health
+from app.routers import auth, health, users
 
 setup_logging()
 
@@ -32,6 +34,20 @@ app = FastAPI(
 )
 
 app.include_router(health.router)
+app.include_router(auth.router)
+app.include_router(users.router)
+
+
+@app.exception_handler(AppError)
+async def handle_app_error(_request: Request, exc: AppError) -> JSONResponse:
+    """把业务异常翻译成统一的 JSON 错误响应。"""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "code": exc.code,
+            "message": exc.message,
+        },
+    )
 
 
 @app.get("/", include_in_schema=False)
