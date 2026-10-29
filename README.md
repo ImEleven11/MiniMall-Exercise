@@ -26,6 +26,7 @@ uvicorn app.main:app --reload --port 8000
 
 ## 文档
 
+- [项目全景：分层与依赖](docs/00-project-map.md)
 - [架构蓝图](docs/architecture-blueprint.md)
 - [01 · 框架骨架](docs/01-framework.md)
 - [02 · 数据库接入](docs/02-database.md)

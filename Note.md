@@ -536,3 +536,149 @@ TokenResponse(access_token, expires_in=分钟×60)
 200 OK + TokenResponse JSON
 ```
 
+
+
+## 分层图、依赖图、全链路（03）
+
+**最重要的一条规则：箭头只能从上往下。** 下层不能 import 上层。
+
+```
+┌──────────────────────────────────────────────┐
+│ main.py                                       │
+│ 组装：创建 app、挂路由、注册异常处理器         │
+└───────────────────┬──────────────────────────┘
+                    │ include_router
+┌───────────────────▼──────────────────────────┐
+│ routers/        HTTP 层                       │
+│   ├── schemas.py    请求校验 / 响应序列化      │
+│   └── deps.py       当前用户 / Session 上下文  │
+└───────────────────┬──────────────────────────┘
+                    │ 调用
+┌───────────────────▼──────────────────────────┐
+│ services/       业务层                        │
+│ 业务规则、事务提交、组合多个数据操作           │
+└───────────────────┬──────────────────────────┘
+                    │ 查询 / 写入
+┌───────────────────▼──────────────────────────┐
+│ models.py → database.py → SQLite              │
+└──────────────────────────────────────────────┘
+
+横切工具：config.py、security.py、exceptions.py、logging_config.py
+```
+
+静态依赖图：
+
+```
+main.py
+ ├── routers/auth.py
+ │     ├── schemas.py
+ │     ├── services/auth_service.py
+ │     │     ├── models.py ──► database.py ──► config.py
+ │     │     ├── security.py ──► config.py
+ │     │     └── exceptions.py
+ │     ├── database.py
+ │     └── config.py
+ │
+ ├── routers/users.py
+ │     ├── schemas.py
+ │     └── deps.py
+ │           ├── database.py
+ │           ├── models.py
+ │           └── security.py
+ │
+ ├── routers/health.py
+ │     ├── config.py
+ │     └── database.py
+ │
+ ├── exceptions.py
+ └── logging_config.py ──► config.py
+```
+
+可以看到：
+
+- **`config.py`、`exceptions.py` 不依赖任何内部模块**，所以在最底层。
+- **`schemas.py` 不依赖任何内部模块**，它只是接口契约。
+- **`services/auth_service.py` 不 import `database.py`**，也不 import FastAPI。它只接收一个 `Session` 参数。这是关键设计：业务层不知道 Session 从哪来。
+- **`models.py` 和 `database.py` 看起来互相依赖**：`models` 需要 `Base`，`database.init_db()` 又需要 `models` 注册表。解决方式是「函数内部延迟 import」，所以不会循环导入报错。
+
+示例：运行时：注册请求怎么走：
+
+```
+POST /api/v1/auth/register
+  ↓
+routers/auth.py 的 register()
+  ↓
+RegisterRequest 校验（在进入函数体之前）
+  ↓
+Depends(get_db) → database.SessionLocal() → Session
+  ↓
+auth_service.register_user(db, username, password)
+  ├── select User            → models.py → database.py → SQLite
+  ├── hash_password          → security.py → config.py
+  ├── db.commit()
+  └── 重复用户名 → exceptions.py → main.py 的异常处理器 → 409
+  ↓
+UserOut.model_validate()     → schemas.py
+  ↓
+201 JSON
+```
+
+示例：运行时：`/users/me` 怎么走
+
+这是依赖注入最典型的一条链路：
+
+```text
+GET /api/v1/users/me
+  ↓
+routers/users.py 的 read_me()
+  ↓
+current_user: CurrentUser
+  ↓ FastAPI 解析依赖树
+get_current_user
+  ├── HTTPBearer 从请求头取 token
+  ├── get_db → Session
+  ├── decode_access_token → security.py → config.py
+  └── db.get(User, user_id) → models.py → SQLite
+  ↓
+UserOut.model_validate(user)
+  ↓
+200 JSON
+```
+
+注意三个容易误解的点：
+
+1. **`Depends` 不是普通函数调用**，而是声明「我需要这个依赖」。FastAPI 在进入路由函数前自动解析。
+2. **Service 不创建 Session**，Session 由 `get_db` 创建，作为参数传进去。
+3. **Router 不查数据库**，它只负责 HTTP 参数、状态码和调用 Service。
+
+**每个文件一句话：**
+
+| 文件                       | 一句话                                    |
+| -------------------------- | ----------------------------------------- |
+| `config.py`                | 读 `.env`，产出配置对象                   |
+| `database.py`              | 管理 engine、Session、Base，提供 `get_db` |
+| `models.py`                | 定义数据库表 `users`                      |
+| `schemas.py`               | 定义接口的输入输出，过滤密码等敏感字段    |
+| `security.py`              | 密码哈希、JWT 签发与解码                  |
+| `exceptions.py`            | 表达业务错误，不关心 HTTP                 |
+| `services/auth_service.py` | 注册和登录的业务步骤、事务提交            |
+| `deps.py`                  | 从请求中解析出「当前用户」                |
+| `routers/auth.py`          | 注册、登录的 HTTP 入口                    |
+| `routers/users.py`         | `/users/me` 的 HTTP 入口                  |
+| `routers/health.py`        | 探活，绕过业务层直接检查数据库            |
+| `main.py`                  | 把以上所有零件组装成应用                  |
+
+==记录疑问：数据校验为什么在那个时候进行，校验什么？==
+
+### 建议你现在做一件事
+
+不要从 `main.py` 开始通读。**从请求倒着走一遍**：
+
+```text
+打开 /docs → 调一次注册 → 打开 routers/auth.py
+→ 找到 auth_service.register_user()
+→ 跟到 models.User 和 security.hash_password()
+→ 跟到 database.get_db()
+```
+
+跟完这一条，注册链路就真正长在脑子里了。`/users/me` 再跟一遍，依赖注入也就通了。

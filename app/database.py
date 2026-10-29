@@ -24,7 +24,7 @@ connect_args = (
 
 engine = create_engine(settings.database_url, connect_args=connect_args)
 
-# 创建 Sesssion 工厂
+# 创建 Session 工厂
 SessionLocal = sessionmaker(
     bind=engine, # 把 Session 绑定到上面创建的 engine
     autoflush=False, # 关闭自动刷新：关掉后，查询前不会偷偷发 SQL，行为更可预期
