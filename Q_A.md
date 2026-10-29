@@ -118,3 +118,68 @@ FastAPI 会在进入 `read_me()` 之前先解析 `get_current_user`：取 Token�
 把 `get_current_user` 单独放在 `deps.py`，是为了让未来的受保护接口直接复用 `current_user: CurrentUser`，让 Router 只关心 HTTP 参数和业务调用，也让 Token 解析逻辑可以独立测试。
 
 `deps.py` 不负责签发 Token，不负责密码校验，不负责创建数据库 Session，也不负责业务权限。它只负责「从请求中准备当前用户」这一件事。
+
+## 5. Swagger 里的 user 是什么？Authorize 这一步要做什么，为什么要粘贴 Token？
+
+HTTP 是无状态的。`/auth/login` 成功只是那一次请求的事，服务端不会记住你；下一个请求必须重新证明「我是谁」。**JWT 就是每次请求携带的临时身份证。**
+
+Authorize 不是登录，它只做一件事：把登录接口返回的 `access_token`（JWT）保存到 Swagger 页面，之后对受保护接口自动加请求头：
+
+```http
+Authorization: Bearer eyJ...
+```
+
+Swagger 不知道登录响应里哪个字段是 Token，也不会自动替你保存，所以要手动粘贴。它只负责保存和发送，不负责验证；验签发生在服务端。
+
+Authorize 之后，Swagger 实际发出的请求等价于：
+
+```bash
+curl -H "Authorization: Bearer eyJ..." http://127.0.0.1:8000/api/v1/users/me
+```
+
+不做 Authorize 就等于没有这个请求头，受保护接口会返回 401。
+
+## 6. 为什么做了 Authorize 之后，就能查看 /users/me？
+
+因为 `/users/me` 的代码声明了当前用户依赖：
+
+```python
+def read_me(current_user: CurrentUser) -> UserOut:
+```
+
+`CurrentUser` 背后是 `get_current_user`。FastAPI 在进入路由函数之前，会先执行依赖链：
+
+```text
+Authorization: Bearer <JWT>
+  → HTTPBearer 取出 Token
+  → decode_access_token 验签、检查 exp
+  → payload["sub"] 得到 user_id
+  → db.get(User, user_id) 查数据库
+  → 把 User 注入 read_me(current_user)
+  → 返回 UserOut
+```
+
+没有 Token 时，`HTTPBearer` 拿不到凭证，`get_current_user` 抛 401，`read_me()` 根本不会执行；有合法 Token 时，服务端现场识别用户并查库，所以能返回当前用户信息。
+
+用户不是从请求参数里传进来的。如果让客户端传 `user_id`，任何人都可以改成别人的 ID；Token 由服务端签名，客户端改 payload 会导致签名失效，所以身份必须来自 Token。
+
+## 7. Authorize 里粘贴的 Token 就是 JWT 吗？为什么响应里还有 token_type？
+
+是。Authorize 里粘贴的就是登录接口返回的 `access_token`，这个字符串就是 JWT，格式为：
+
+```text
+header.payload.signature
+```
+
+Token 是泛称，JWT 是具体格式，Bearer 是携带方式。Swagger 不解析也不验证它，只负责保存并放进请求头；服务端 `decode_access_token` 才真正验签。粘贴时只粘贴 JWT 本身，不要带 `Bearer`  前缀，否则请求头会变成 `Bearer Bearer ...`。
+
+`token_type` 不是 JWT 的内容，而是登录接口响应里的一个字段。`TokenResponse` 定义时给了默认值：
+
+```python
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+```
+
+调用 `TokenResponse(access_token=token, expires_in=...)` 时没有传 `token_type`，Pydantic 自动补上 `"bearer"`；FastAPI 又通过 `response_model=TokenResponse` 序列化响应，默认值默认会被包含，所以 Swagger 能看到它。
