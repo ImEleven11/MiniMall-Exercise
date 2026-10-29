@@ -81,3 +81,89 @@ async def lifespan(app: FastAPI):
     logger.info("应用关闭")
 ```
 
+
+
+## `database.py`
+
+ORM 全称 Object-Relational Mapping，**对象关系映射**。作用是**把数据库表和 Python 类对应起来**，让你用操作对象的方式操作数据库，不用手写 SQL。
+
+对应关系大致是：
+
+| 数据库概念 | ORM 概念             |
+| :--------- | :------------------- |
+| 表         | Python 类            |
+| 表的一行   | 类的一个实例（对象） |
+| 表的一列   | 类的属性             |
+| 列的类型   | 属性类型注解         |
+
+举个例子，一个 `User` 模型大致长这样：
+
+```py
+class User(Base):
+    __tablename__ = "users"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str]
+```
+
+有了它，你就可以写：
+
+```py
+user = User(name="张三")   # 相当于准备插入一行
+db.add(user)
+db.commit()                # 真正执行 INSERT
+
+users = db.query(User).all()   # 相当于 SELECT * FROM users
+```
+
+SQLAlchemy 负责把你的对象操作翻译成 SQL 发给数据库，再把结果翻译回对象。好处是代码更贴近业务、少写重复 SQL、换数据库时改动小。
+
+
+
+```py
+def create_user(db: Session = Depends(get_db)):
+    user = User(name="张三")
+    db.add(user)
+    db.commit()      # 业务里显式提交
+    db.refresh(user)
+    return user
+```
+
+`get_db` 只负责"**创建、回滚、关闭**"，**不负责 commit**。提交由业务代码决定
+
+
+
+```py
+Base.metadata.create_all(bind=engine)
+```
+
+遍历 `metadata` 里登记的所有表，在 `engine` 指向的数据库里创建它们。
+
+几个关键特性：
+
+- **只建不存在的表**。对已存在的表会跳过，不会报错，也不会改动它。所以可以每次启动都执行，是幂等的。
+- **不会修改已有表结构**。如果你给模型加了一列，`create_all` 不会给已存在的表 `ALTER TABLE` 加列。它只负责"从无到有"。字段变更、删除列这类结构演进要靠数据库迁移工具（Alembic）。这是初学者最容易踩的坑。
+- **不处理删表**。删掉的模型对应的旧表会留在数据库里。
+
+所以 `create_all` 适合开发初期、或者表结构稳定的小项目；正式项目一般用 Alembic 管理迁移。
+
+
+
+串起来：
+
+```
+Base（基类）
+  └─ app.models 里的各模型继承 Base
+        └─ 定义时自动登记到 Base.metadata
+
+init_db（启动时，lifespan 里调用一次）
+  ├─ import app.models    把模型加载进来、完成登记
+  ├─ Base.metadata.create_all   按登记册建表
+  └─ 主动连接一次              确保库文件存在、验证可用
+
+get_db（每个请求）
+  ├─ SessionLocal()  创建会话
+  ├─ yield           交给路由用
+  ├─ 异常 rollback
+  └─ finally close   归还连接
+```
+

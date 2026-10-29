@@ -24,11 +24,12 @@ connect_args = (
 
 engine = create_engine(settings.database_url, connect_args=connect_args)
 
+# 创建 Sesssion 工厂
 SessionLocal = sessionmaker(
-    bind=engine,
-    autoflush=False,
-    autocommit=False,
-    expire_on_commit=False,
+    bind=engine, # 把 Session 绑定到上面创建的 engine
+    autoflush=False, # 关闭自动刷新：关掉后，查询前不会偷偷发 SQL，行为更可预期
+    autocommit=False, # 关闭自动提交：一个请求一个 Session，成功则 commit
+    expire_on_commit=False, # 关闭过期时间：提交后不让对象属性过期
 )
 
 
@@ -38,15 +39,21 @@ class Base(DeclarativeBase):
 
 def get_db() -> Generator[Session, None, None]:
     """每个请求打开一个 Session，请求结束或异常时关闭。"""
-    db = SessionLocal()
+    db = SessionLocal() # 每个请求创建一个独立的 Session
     try:
-        yield db
+        yield db # 返回 Session，让调用者使用
     except Exception:
-        db.rollback()
+        db.rollback() # 如果请求过程中发生异常，回滚事务
         raise
     finally:
-        db.close()
+        db.close() # 请求结束后关闭 Session
 
+# 请求进来
+#   → SessionLocal() 创建 db
+#   → yield db，交给路由函数
+#   → 路由函数执行
+#        ├─ 正常返回 → finally: db.close()
+#        └─ 抛异常   → except: db.rollback() → raise → finally: db.close()
 
 def init_db() -> None:
     """创建数据库文件和表结构。
