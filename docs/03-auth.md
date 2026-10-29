@@ -27,22 +27,26 @@
 
 ## 2. 文件变化
 
-| 文件 | 职责 |
-| --- | --- |
-| `app/models.py` | `User` ORM 模型 |
-| `app/schemas.py` | 注册/登录请求、用户响应、Token 响应 |
-| `app/security.py` | 密码哈希、JWT 签发/解码 |
-| `app/exceptions.py` | 业务异常基类与具体异常 |
-| `app/deps.py` | `get_current_user` 依赖 |
-| `app/services/auth_service.py` | 注册、登录的业务逻辑 |
-| `app/routers/auth.py` | `/register`、`/login` |
-| `app/routers/users.py` | `/users/me` |
-| `app/main.py` | 注册路由、注册异常处理器 |
-| `app/database.py` | 启动时导入模型，让 `create_all` 能建表 |
-| `app/config.py` | 增加 JWT 配置 |
-| `.env` / `.env.example` | 增加 JWT 密钥与有效期 |
+
+| 文件                             | 职责                         |
+| ------------------------------ | -------------------------- |
+| `app/models.py`                | `User` ORM 模型              |
+| `app/schemas.py`               | 注册/登录请求、用户响应、Token 响应      |
+| `app/security.py`              | 密码哈希、JWT 签发/解码             |
+| `app/exceptions.py`            | 业务异常基类与具体异常                |
+| `app/deps.py`                  | `get_current_user` 依赖      |
+| `app/services/auth_service.py` | 注册、登录的业务逻辑                 |
+| `app/routers/auth.py`          | `/register`、`/login`       |
+| `app/routers/users.py`         | `/users/me`                |
+| `app/main.py`                  | 注册路由、注册异常处理器               |
+| `app/database.py`              | 启动时导入模型，让 `create_all` 能建表 |
+| `app/config.py`                | 增加 JWT 配置                  |
+| `.env` / `.env.example`        | 增加 JWT 密钥与有效期              |
+
 
 ---
+
+
 
 ## 3. users 表
 
@@ -81,7 +85,11 @@ Base.metadata.create_all(bind=engine)
 
 ---
 
+
+
 ## 4. 密码是怎么存的
+
+
 
 ### 4.1 绝不存明文
 
@@ -103,6 +111,8 @@ verify_password("secret123", hashed)  # True
 verify_password("wrong", hashed)      # False
 ```
 
+
+
 ### 4.2 为什么不用 MD5 / SHA256
 
 普通哈希计算太快，攻击者可以每秒尝试数十亿次。argon2 故意设计得慢且占内存，专门用于密码存储。
@@ -119,7 +129,11 @@ id, username, created_at
 
 ---
 
+
+
 ## 5. JWT 在本项目里怎么用
+
+
 
 ### 5.1 JWT 的三段
 
@@ -128,16 +142,20 @@ eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9 . eyJzdWIiOiIxIiwiZXhwIjoxNzkzMDgwMDQ4fQ . 
 └──────────── header ────────────────┘   └──────────── payload ───────────────┘   └─ signature ─┘
 ```
 
-| 部分 | 内容 | 是否可读 |
-| --- | --- | --- |
-| header | 算法，例如 HS256 | 可解码 |
-| payload | 业务数据，例如 `sub`、`exp` | 可解码 |
-| signature | 用密钥对前两部分签名 | 不可伪造 |
+
+| 部分        | 内容                  | 是否可读 |
+| --------- | ------------------- | ---- |
+| header    | 算法，例如 HS256         | 可解码  |
+| payload   | 业务数据，例如 `sub`、`exp` | 可解码  |
+| signature | 用密钥对前两部分签名          | 不可伪造 |
+
 
 **JWT 不是加密**。任何人都能解码 payload，只是改内容后签名会对不上。所以：
 
 - 不放密码、手机号等敏感信息。
 - 只放 `user_id` 这种不敏感、够用的信息。
+
+
 
 ### 5.2 本项目放了什么
 
@@ -212,7 +230,11 @@ Authorization: Bearer eyJhbGciOi...
 
 ---
 
+
+
 ## 6. 三条请求链路
+
+
 
 ### 6.1 注册
 
@@ -232,6 +254,8 @@ POST /api/v1/auth/register
   → 201
 ```
 
+
+
 ### 6.2 登录
 
 ```text
@@ -244,6 +268,8 @@ POST /api/v1/auth/login
   → Router 组装 TokenResponse
   → 200
 ```
+
+
 
 ### 6.3 访问受保护接口
 
@@ -263,7 +289,11 @@ GET /api/v1/users/me
 
 ---
 
+
+
 ## 7. 分层上的几个决定
+
+
 
 ### 7.1 Service 不依赖 FastAPI
 
@@ -313,29 +343,35 @@ async def handle_app_error(_request, exc):
 
 ### 7.4 错误响应目前有两种形状
 
-| 来源 | 形状 |
-| --- | --- |
-| 业务异常 | `{"code": "...", "message": "..."}` |
-| FastAPI `HTTPException`（如鉴权失败） | `{"detail": "..."}` |
-| 参数校验失败 | FastAPI 默认 422 结构 |
+
+| 来源                             | 形状                                  |
+| ------------------------------ | ----------------------------------- |
+| 业务异常                           | `{"code": "...", "message": "..."}` |
+| FastAPI `HTTPException`（如鉴权失败） | `{"detail": "..."}`                 |
+| 参数校验失败                         | FastAPI 默认 422 结构                   |
+
 
 这是当前阶段的简化。后续可以加一个统一的校验异常处理器，把三种形状收敛。先看懂各自由谁产生，比一开始就统一更重要。
 
 ---
 
+
+
 ## 8. 实际验证结果
 
 使用 TestClient 跑完整链路，结果如下：
 
-| 操作 | 结果 |
-| --- | --- |
-| 注册新用户 | 201，返回 id / username / created_at，没有密码字段 |
-| 再次注册同名用户 | 409 `{"code": "USERNAME_EXISTS", ...}` |
-| 错误密码登录 | 401 `{"code": "INVALID_CREDENTIALS", ...}` |
-| 正确密码登录 | 200，返回 `access_token`、`token_type`、`expires_in=3600` |
-| 不带 Token 访问 `/users/me` | 401 |
-| 带正确 Token 访问 `/users/me` | 200，返回当前用户 |
-| 带伪造 Token 访问 `/users/me` | 401 |
+
+| 操作                       | 结果                                                   |
+| ------------------------ | ---------------------------------------------------- |
+| 注册新用户                    | 201，返回 id / username / created_at，没有密码字段             |
+| 再次注册同名用户                 | 409 `{"code": "USERNAME_EXISTS", ...}`               |
+| 错误密码登录                   | 401 `{"code": "INVALID_CREDENTIALS", ...}`           |
+| 正确密码登录                   | 200，返回 `access_token`、`token_type`、`expires_in=3600` |
+| 不带 Token 访问 `/users/me`  | 401                                                  |
+| 带正确 Token 访问 `/users/me` | 200，返回当前用户                                           |
+| 带伪造 Token 访问 `/users/me` | 401                                                  |
+
 
 数据库检查：
 
@@ -355,81 +391,20 @@ OpenAPI 路径：
 
 ---
 
+
+
 ## 9. 在 Swagger 里手动测试
 
 1. 打开 `/docs`。
 2. 展开 `POST /api/v1/auth/register`，点 **Try it out**，填：
-
-   ```json
+  ```json
    {"username": "alice", "password": "secret123"}
-   ```
-
+  ```
 3. 展开 `POST /api/v1/auth/login`，用同样的账号登录。
 4. 复制响应里的 `access_token`。
-5. 点击页面右上角的 **Authorize**，粘贴 Token（只粘贴 Token 本身，不要带 `Bearer `）。
+5. 点击页面右上角的 **Authorize**，粘贴 Token（只粘贴 Token 本身，不要带 `Bearer` ）。
 6. 调用 `GET /api/v1/users/me`，应该返回 200。
 7. 点 **Authorize → Logout** 后再次调用，应该返回 401。
 
 ---
 
-## 10. 常见坑
-
-1. **存明文密码**：注册成功不代表安全，必须确认库里是 `$argon2id$...`。
-2. **把 `hashed_password` 返回给前端**：用独立的 `UserOut`，不要直接返回 ORM 对象。
-3. **密钥写死在代码里或提交到 Git**：密钥只在 `.env`，`.env` 已忽略。
-4. **密钥太短**：配置层会直接报错，这是有意的。
-5. **改了 `.env` 没重启**：配置在进程启动时读取并缓存。
-6. **以为 JWT 是加密的**：payload 可以被解码，不要放敏感信息。
-7. **不校验过期时间**：本项目用 `jwt.decode`，它会自动校验 `exp`。
-8. **更换密钥后旧 Token 全失效**：这是签名机制的正常行为。
-9. **把 401 和 403 混用**：401 = 未认证；403 = 已认证但无权限。
-10. **重复注册只靠「先查询」**：并发下仍可能撞唯一索引，所以还要捕获 `IntegrityError`。
-11. **在日志里打印密码或完整 Token**：当前代码没有这样做，后续也不要加。
-12. **created_at 看起来比本地时间少 8 小时**：数据库存的是 UTC。
-
----
-
-## 11. 自测问题
-
-1. 为什么密码哈希要用 argon2，而不是 MD5？
-2. 同一个密码两次哈希结果不同，登录时怎么校验？
-3. JWT 的三段分别是什么？哪一段能证明「没被篡改」？
-4. 为什么 JWT payload 里不能放密码？
-5. `get_current_user` 的依赖链是怎样的？它在什么时候执行？
-6. 为什么拿到 `user_id` 之后还要查数据库？
-7. 为什么 Service 不直接抛 `HTTPException`？
-8. 注册时为什么既查重又捕获 `IntegrityError`？
-9. `JWT_SECRET` 泄露会发生什么？
-10. Token 过期后，服务端怎么知道？
-
----
-
-## 12. 动手练习
-
-1. 注册两个不同用户，观察数据库里的哈希是否不同。
-2. 用 Swagger 完成「注册 → 登录 → Authorize → /users/me」。
-3. 把 `JWT_EXPIRE_MINUTES` 改成 1，重启，登录后等 1 分钟再访问，观察 401。
-4. 修改 `.env` 里的 `JWT_SECRET`，重启，用旧 Token 访问，观察 401。
-5. 用 Python 解码 Token 的 payload（不校验签名），看看里面有什么：
-
-   ```bash
-   conda run -n test python -c "import jwt; t='把登录返回的 token 粘贴到这里'; print(jwt.decode(t, options={'verify_signature': False, 'verify_exp': False}))"
-   ```
-
-6. 尝试用 `GET /api/v1/users/me` 访问一个不存在的用户 ID 的 Token（可以手动构造，但会因为签名失败而 401）。
-
----
-
-## 13. 下一个模块：商品
-
-下一份文档 `docs/04-products.md` 会加入：
-
-- `Product` 模型和 `products` 表
-- 种子数据脚本，插入几件商品
-- 商品列表和详情接口
-- 分页的基础写法
-- 为下一阶段的 Redis 缓存做准备
-
-Redis 会单独作为 `docs/05-redis.md`，先把「商品数据从 SQLite 读出来」跑通，再给它加缓存，这样你能对比加缓存前后的链路差异。
-
-**本模块边界**：只做注册、登录、当前用户。不做登出、刷新 Token、角色权限、限流——这些都在蓝图的可选扩展里。
