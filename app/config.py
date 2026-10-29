@@ -24,8 +24,12 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60
 
-
+# 用函数的参数作为 key 缓存结果
+# get_settings() 没有参数，所以第一次调用时执行 Settings() 并把结果存起来
+# 之后每次调用都直接返回缓存的那个对象，不再重新执行 Settings()
+# 这样就避免了每次调用都重新读取 .env 文件，提高了性能
+# 全局只有一个 Settings 实例，所有地方拿到的都是同一个对象，配置保持一致
 @lru_cache
 def get_settings() -> Settings:
     """缓存配置对象，避免每次调用都重新读取 .env。"""
-    return Settings()
+    return Settings() # 调用这个类，返回一个装满了配置项的实例对象

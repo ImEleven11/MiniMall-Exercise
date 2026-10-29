@@ -51,6 +51,8 @@ async def handle_app_error(_request: Request, exc: AppError) -> JSONResponse:
 
 
 @app.get("/", include_in_schema=False)
+# schema 指 API 文档
+# include_in_schema=False 表示这个接口不包含在 API 文档中
 def root() -> dict[str, str]:
     return {
         "message": f"{settings.app_name} API",

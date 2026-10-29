@@ -371,7 +371,7 @@ GET /openapi.json  → 路径列表：["/healthz"]
 2. `uvicorn app.main:app` 里的 `app.main:app` 分别指什么？
 3. `.env`、环境变量、代码默认值，谁的优先级最高？
 4. 为什么 `get_settings()` 要加 `@lru_cache`？
-5. `lifespan` 适合放什么代码？为什么不能放在每个请求里？
+5. `lifespan` **适合放什么代码？为什么不能放在每个请求里？**
 6. `APIRouter` 解决了什么问题？如果所有路由都写在 `main.py` 会怎样？
 7. `/docs` 是哪里来的？为什么新增一个路由后文档会自动更新？
 8. 现在访问 `/healthz`，能证明数据库正常吗？为什么？

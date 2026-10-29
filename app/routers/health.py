@@ -9,7 +9,11 @@ from app.database import engine
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["health"])
+# APIRouter 是 FastAPI 提供的路由分组容器
+# 可以理解为迷你FastAPI
+# 但它本身不能直接运行，必须被挂到真正的 app 上
+# tag 只影响 /docs 文档的展示：Swagger UI 会按 tag 把接口分组折叠显示
+router = APIRouter(tags=["health"]) 
 
 
 @router.get("/healthz", summary="健康检查")
