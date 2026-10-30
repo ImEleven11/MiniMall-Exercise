@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     database_url: str = "sqlite:///./data/app.db"
 
+    redis_url: str = "redis://127.0.0.1:6379/0"
+    redis_prefix: str = "minimall:dev"
+
     # JWT 密钥必须由 .env / 环境变量提供，且至少 32 个字符。
     jwt_secret: str = Field(min_length=32)
     jwt_algorithm: str = "HS256"

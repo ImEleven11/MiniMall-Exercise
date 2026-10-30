@@ -1,8 +1,13 @@
+import logging
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app import cache
 from app.exceptions import ProductNotFoundError
 from app.models import Product
+
+logger = logging.getLogger(__name__)
 
 
 def list_products(
@@ -33,8 +38,28 @@ def list_products(
     return items, total
 
 
-def get_product(db: Session, product_id: int) -> Product:
+def get_product(db: Session, product_id: int) -> dict[str, object]:
+    """Cache-Aside：先查 Redis，未命中再查 SQLite 并回填缓存。"""
+    cached = cache.get_product_cache(product_id)
+    if cached is not None:
+        logger.info("商品详情命中缓存 | product_id=%s", product_id)
+        return cached
+
+    logger.info("商品详情缓存未命中，查询数据库 | product_id=%s", product_id)
+
     product = db.get(Product, product_id)
     if product is None or not product.is_active:
         raise ProductNotFoundError()
-    return product
+
+    data = {
+        "id": product.id,
+        "name": product.name,
+        "description": product.description,
+        "price_cents": product.price_cents,
+        "stock": product.stock,
+        "is_active": product.is_active,
+        "created_at": product.created_at.isoformat(),
+        "updated_at": product.updated_at.isoformat(),
+    }
+    cache.set_product_cache(product_id, data)
+    return data

@@ -703,8 +703,6 @@ UserOut.model_validate(user)
 +----+-------+
 ```
 
-
-
 | 方法                           | 返回                                      | 说明                                               |
 | :----------------------------- | :---------------------------------------- | :------------------------------------------------- |
 | `db.execute(query).all()`      | `[(1, '苹果'), (2, '香蕉'), (3, '橙子')]` | 所有行，每行是元组                                 |
@@ -713,3 +711,20 @@ UserOut.model_validate(user)
 | `db.scalars(query).all()`      | `['苹果', '香蕉', '橙子']`                | 所有行，每行取**第一列**                           |
 | `db.scalar_one(query)`         | `1`                                       | 第一行第一列，但**必须恰好一行**，0 行或多行都报错 |
 | `db.scalar_one_or_none(query)` | `1` 或 `None`                             | 恰好一行返回该值，0 行返回 `None`，多行报错        |
+
+
+
+## `cache.py`
+
+Redis 只能存字符串/字节，存对象前要 `json.dumps` **序列化**，读出来要 `json.loads` **反序列化**。
+
+```
+读 Redis
+  ├─ RedisError → 日志 → None（降级）
+  ├─ None（未命中/过期）→ None（正常）
+  └─ 拿到 raw
+       ├─ JSON 解析失败 → 日志 + 删 key → None
+       ├─ 不是 dict → 日志 + 删 key → None
+       └─ 合法 dict → 返回 data
+```
+

@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from app import cache
 from app.config import get_settings
 from app.database import engine, init_db
 from app.exceptions import AppError
@@ -21,7 +22,15 @@ async def lifespan(app: FastAPI):
     """应用启动与关闭时执行一次，用来管理进程级资源。"""
     logger.info("应用启动 | name=%s env=%s", settings.app_name, settings.app_env)
     init_db()
+
+    if cache.check_redis():
+        logger.info("Redis 连接成功")
+    else:
+        logger.warning("Redis 不可用，商品详情将降级为数据库查询")
+
     yield
+
+    cache.close_redis()
     engine.dispose()
     logger.info("应用关闭")
 

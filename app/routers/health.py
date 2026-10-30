@@ -4,6 +4,8 @@ from fastapi import APIRouter, Response, status
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+from app import cache
+from app import cache
 from app.config import get_settings
 from app.database import engine
 
@@ -18,7 +20,7 @@ router = APIRouter(tags=["health"])
 
 @router.get("/healthz", summary="健康检查")
 def healthz(response: Response) -> dict[str, object]:
-    """检查应用本身和数据库连接；Redis 检查会在下一个模块加入。"""
+    """检查应用、数据库和 Redis；Redis 只做缓存，故障时降级但不影响数据库。"""
     settings = get_settings()
     database_ok = True
 
@@ -30,11 +32,14 @@ def healthz(response: Response) -> dict[str, object]:
         logger.exception("数据库健康检查失败")
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
 
+    redis_ok = cache.check_redis()
+
     return {
-        "status": "ok" if database_ok else "degraded",
+        "status": "ok" if database_ok and redis_ok else "degraded",
         "app": settings.app_name,
         "env": settings.app_env,
         "components": {
             "database": "ok" if database_ok else "error",
+            "redis": "ok" if redis_ok else "error",
         },
     }

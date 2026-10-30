@@ -1,8 +1,8 @@
 # 00 · 项目全景：分层、依赖与请求链路
 
 > 用途：把已经写好的单个文件串成一张图。
-> 更新时间：2026-10-29
-> 当前范围：框架骨架 + 数据库 + 用户/JWT + 商品读取。
+> 更新时间：2026-10-30
+> 当前范围：框架骨架 + 数据库 + 用户/JWT + 商品读取 + Redis 缓存。
 
 ---
 
@@ -25,6 +25,7 @@ services（业务规则、事务）
   │
   ├──────────► security（密码哈希、JWT）
   ├──────────► exceptions（业务异常）
+  ├──────────► cache（Redis 商品缓存）──► Redis
   ▼
 models（ORM 对象）
   │
@@ -121,6 +122,7 @@ flowchart TD
         MODELS["models.py<br/>User / Product ORM"]
         SECURITY["security.py<br/>密码哈希 / JWT"]
         EXCEPTIONS["exceptions.py<br/>业务异常"]
+        CACHE["cache.py<br/>Redis 商品缓存"]
     end
 
     subgraph L0["基础设施"]
@@ -128,6 +130,7 @@ flowchart TD
         CONFIG["config.py<br/>.env 配置"]
         LOGGING["logging_config.py<br/>日志格式"]
         SQLITE[("SQLite<br/>data/app.db")]
+        REDIS[("Redis<br/>商品详情缓存")]
     end
 
     MAIN --> ROUTERS
@@ -135,12 +138,14 @@ flowchart TD
     MAIN --> EXCEPTIONS
     MAIN --> LOGGING
     MAIN --> CONFIG
+    MAIN --> CACHE
 
     ROUTERS --> SCHEMAS
     ROUTERS --> SERVICES
     ROUTERS --> DEPS
     ROUTERS --> DB
     ROUTERS --> CONFIG
+    ROUTERS --> CACHE
 
     DEPS --> DB
     DEPS --> MODELS
@@ -149,11 +154,14 @@ flowchart TD
     SERVICES --> MODELS
     SERVICES --> SECURITY
     SERVICES --> EXCEPTIONS
+    SERVICES --> CACHE
 
     MODELS --> DB
     DB --> SQLITE
     DB --> CONFIG
     DB -. "init_db 中延迟导入，用于注册表" .-> MODELS
+    CACHE --> REDIS
+    CACHE --> CONFIG
     SECURITY --> CONFIG
     LOGGING --> CONFIG
 ```
@@ -171,6 +179,7 @@ flowchart TD
 | 数据层 | `database.py` | engine、Session 工厂、`get_db`、建表 | 业务查询 |
 | 工具层 | `security.py` | 密码哈希、JWT 签发/解码 | 查用户、业务判断 |
 | 工具层 | `exceptions.py` | 表达业务错误 | HTTP 响应 |
+| 缓存层 | `cache.py` | Redis 连接、商品缓存读写删、健康检查 | 业务规则、数据库查询 |
 | 基础层 | `config.py` | 读取环境变量 / `.env` | 业务逻辑 |
 | 基础层 | `logging_config.py` | 统一日志格式 | 记录具体业务事件 |
 
@@ -182,7 +191,7 @@ flowchart TD
 
 | 文件 | 内部 import | 被谁 import | 外部资源 |
 | --- | --- | --- | --- |
-| `config.py` | 无 | `database`、`security`、`logging_config`、`main`、`routers/auth`、`routers/health` | `.env` |
+| `config.py` | 无 | `database`、`security`、`cache`、`logging_config`、`main`、`routers/auth`、`routers/health` | `.env` |
 | `logging_config.py` | `config` | `main` | Python logging |
 | `exceptions.py` | 无 | `services/auth_service`、`services/product_service`、`main` | 无 |
 | `schemas.py` | 无 | `routers/auth`、`routers/users`、`routers/products` | Pydantic |
@@ -190,13 +199,14 @@ flowchart TD
 | `database.py` | `config`（延迟导入 `models`） | `main`、`models`、`deps`、`routers/auth`、`routers/health`、`routers/products` | SQLAlchemy、SQLite |
 | `models.py` | `database.Base` | `deps`、`services/auth_service`、`services/product_service`、`database.init_db` | SQLAlchemy |
 | `deps.py` | `database`、`models`、`security` | `routers/users` | FastAPI、SQLAlchemy |
+| `cache.py` | `config` | `services/product_service`、`routers/health`、`main` | redis |
 | `services/auth_service.py` | `models`、`security`、`exceptions` | `routers/auth` | SQLAlchemy |
-| `services/product_service.py` | `models`、`exceptions` | `routers/products` | SQLAlchemy |
+| `services/product_service.py` | `cache`、`models`、`exceptions` | `routers/products` | SQLAlchemy、Redis |
 | `routers/auth.py` | `config`、`database`、`schemas`、`services` | `main` | FastAPI |
 | `routers/users.py` | `deps`、`schemas` | `main` | FastAPI |
 | `routers/products.py` | `database`、`schemas`、`services` | `main` | FastAPI |
-| `routers/health.py` | `config`、`database` | `main` | FastAPI、SQLAlchemy |
-| `main.py` | `config`、`database`、`exceptions`、`logging_config`、`routers/*` | Uvicorn | FastAPI |
+| `routers/health.py` | `cache`、`config`、`database` | `main` | FastAPI、SQLAlchemy、Redis |
+| `main.py` | `cache`、`config`、`database`、`exceptions`、`logging_config`、`routers/*` | Uvicorn | FastAPI |
 
 关键观察：
 
@@ -224,12 +234,14 @@ uvicorn app.main:app
   │
   ├─ lifespan 启动
   │    ├─ init_db()
-  │    │    ├─ import app.models（确保 User 注册到 Base.metadata）
-  │    │    ├─ Base.metadata.create_all() → 创建 users 表
+  │    │    ├─ import app.models（注册 User / Product）
+  │    │    ├─ Base.metadata.create_all() → 创建 users / products 表
   │    │    └─ engine.connect() → SELECT 1
+  │    ├─ cache.check_redis() → 成功记录日志，失败只告警
   │    └─ 应用开始接收请求
   │
   └─ 进程关闭
+       ├─ cache.close_redis()
        └─ engine.dispose()
 ```
 
@@ -376,9 +388,10 @@ read_me
 ```text
 routers/health.py
   → 不走 Service
-  → 直接用 database.engine.connect()
-  → SELECT 1
-  → 200 / 503
+  → database.engine.connect() → SELECT 1
+  → cache.check_redis() → PING
+  → 数据库失败 → 503
+  → 数据库正常、Redis 失败 → 200，status=degraded
 ```
 
 为什么健康检查绕过 Service？
@@ -386,6 +399,11 @@ routers/health.py
 - 它没有业务规则，只是探活。
 - 直接检查基础设施，不依赖业务代码。
 - 健康检查不应该因为业务层改动而受影响。
+
+数据库是核心依赖，Redis 只是缓存：
+
+- 数据库挂了，应用无法提供正确数据，返回 503。
+- Redis 挂了，商品详情回源 SQLite，仍可用，所以只标记 degraded。
 
 ---
 
@@ -437,9 +455,11 @@ routers/health.py
 5. `security.py`：密码和 JWT 怎么处理。
 6. `exceptions.py`：业务错误怎么表达。
 7. `services/auth_service.py`：注册和登录的业务步骤。
-8. `deps.py`：当前用户怎么从请求里解析出来。
-9. `routers/auth.py`、`routers/users.py`、`routers/health.py`：HTTP 入口。
-10. `main.py`：最后看，理解所有零件怎么被装起来。
+8. `services/product_service.py`：商品列表与详情的业务步骤。
+9. `cache.py`：商品详情缓存怎么读写，Redis 故障怎么降级。
+10. `deps.py`：当前用户怎么从请求里解析出来。
+11. `routers/auth.py`、`routers/users.py`、`routers/products.py`、`routers/health.py`：HTTP 入口。
+12. `main.py`：最后看，理解所有零件怎么被装起来。
 
 另一种更实用的方法是**从请求倒着走**：
 
@@ -466,31 +486,47 @@ routers/health.py
 8. **`get_current_user` 每个请求都重新执行**：是的，但同一个请求内，FastAPI 会缓存依赖结果，不会重复执行。
 9. **JWT 里的内容可以随便信**：payload 可读，但签名保证不可篡改；业务状态仍要查库。
 10. **Router 里写 SQL 也没关系**：小项目能跑，但会让 HTTP 和数据库耦合，后面加缓存/事务时会很难改。
+11. **Redis 是数据库**：不是。当前项目里 Redis 只是商品缓存，数据可以随时删除并从 SQLite 重建。
 
 ---
 
-## 13. 商品模块加入后
+## 13. Redis 缓存加入后
 
-商品模块已经按同样的模式加入：
+Redis 只加在商品详情的 Service 和 `cache.py` 之间：
 
 ```text
 models.py           + Product
 schemas.py          + ProductOut / ProductListResponse
 services/           + product_service.py
 routers/            + products.py
-seed.py             插入示例商品
+cache.py            + Redis 商品缓存
 main.py             include_router(products.router)
 ```
 
-依赖方向没有变：
+商品详情的读取顺序：
 
 ```text
-routers/products.py → product_service → models.Product → database → SQLite
+routers/products.py
+  → product_service.get_product()
+      → cache.get_product_cache() ──命中──► 返回 dict
+      │
+      └─ 未命中 → models.Product → database → SQLite
+                    → cache.set_product_cache() → Redis
 ```
 
-商品接口是公开的，不经过 `deps.py`；它使用 `get_db` 获取 Session，但不要求登录。
+关键点：
 
-下一步加 Redis 时，只会在 `product_service` 和新增的 `cache.py` 之间增加依赖，Router、Schema、Model 都不需要知道缓存的存在。
+- Router、Schema、`Product` 模型都没有因为缓存而改动。
+- 缓存命中时，Service 返回 JSON 友好的 dict，Router 仍然用 `ProductOut.model_validate()` 序列化。
+- Redis 故障时，`cache.py` 捕获异常，Service 回源 SQLite，接口仍然可用。
+- 商品数据变更后（下一步订单扣库存），必须在数据库 commit 之后调用 `cache.delete_product_cache()`。
+
+下一步做订单时，缓存失效会真正发生：
+
+```text
+事务内：更新库存 + 写订单 + commit
+事务外：删除商品缓存
+```
 
 ---
 
@@ -503,4 +539,6 @@ routers/products.py → product_service → models.Product → database → SQLi
 5. 如果要在注册成功后发一封邮件，应该改哪一层？为什么？
 6. 如果把密码哈希逻辑从 `security.py` 挪到 Router 里，会破坏什么？
 7. 如果以后商品接口也要校验登录，应该复用哪个依赖？
-8. 如果新增 Redis 缓存，应该让 Router 直接读 Redis 吗？为什么？
+8. 商品详情缓存命中时，请求经过哪些文件？还会查 SQLite 吗？
+9. Redis 挂了，为什么商品详情仍可用，而 `/healthz` 只标记 degraded？
+10. 库存变化后，为什么必须删除商品缓存？应该在 commit 前还是后？
