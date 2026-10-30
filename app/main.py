@@ -8,7 +8,7 @@ from app.config import get_settings
 from app.database import engine, init_db
 from app.exceptions import AppError
 from app.logging_config import setup_logging
-from app.routers import auth, health, users
+from app.routers import auth, health, products, users
 
 setup_logging()
 
@@ -36,6 +36,7 @@ app = FastAPI(
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(users.router)
+app.include_router(products.router)
 
 
 @app.exception_handler(AppError)

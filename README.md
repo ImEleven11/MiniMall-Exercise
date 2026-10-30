@@ -2,7 +2,7 @@
 
 一个用于学习 FastAPI 分层、数据库、Redis 缓存和 Docker 打包的最小后端项目。
 
-当前进度：**Phase 1 用户与 JWT 登录**
+当前进度：**Phase 2 商品读取（SQLite）**
 
 ## 技术栈
 
@@ -18,6 +18,7 @@
 ```bash
 conda activate test
 pip install -r requirements.txt
+python seed.py
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -31,6 +32,7 @@ uvicorn app.main:app --reload --port 8000
 - [01 · 框架骨架](docs/01-framework.md)
 - [02 · 数据库接入](docs/02-database.md)
 - [03 · 用户与 JWT 登录](docs/03-auth.md)
+- [04 · 商品模块](docs/04-products.md)
 
 ## 目录
 
@@ -39,18 +41,21 @@ app/
 ├── main.py              # 应用入口
 ├── config.py            # 配置
 ├── database.py          # engine / Session / get_db / init_db
-├── models.py            # User 模型
+├── models.py            # User / Product 模型
 ├── schemas.py           # 请求 / 响应模型
 ├── security.py          # 密码哈希 / JWT
 ├── exceptions.py        # 业务异常
 ├── deps.py              # get_current_user
 ├── logging_config.py    # 日志
 ├── services/
-│   └── auth_service.py  # 注册 / 登录
+│   ├── auth_service.py      # 注册 / 登录
+│   └── product_service.py   # 商品列表 / 详情
 └── routers/
     ├── health.py        # 健康检查
     ├── auth.py          # 注册 / 登录
-    └── users.py         # 当前用户
+    ├── users.py         # 当前用户
+    └── products.py      # 商品列表 / 详情
+seed.py                  # 插入示例商品
 data/
 └── app.db               # SQLite 数据文件（自动生成，不提交）
 scripts/

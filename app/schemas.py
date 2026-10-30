@@ -39,3 +39,25 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in: int
+
+
+class ProductOut(BaseModel):
+    """商品响应：金额统一用「分」，避免浮点误差。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    description: str | None
+    price_cents: int
+    stock: int
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class ProductListResponse(BaseModel):
+    items: list[ProductOut]
+    total: int
+    page: int
+    page_size: int

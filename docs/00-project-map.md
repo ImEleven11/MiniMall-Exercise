@@ -2,7 +2,7 @@
 
 > 用途：把已经写好的单个文件串成一张图。
 > 更新时间：2026-10-29
-> 当前范围：框架骨架 + 数据库 + 用户/JWT，共 13 个 Python 文件。
+> 当前范围：框架骨架 + 数据库 + 用户/JWT + 商品读取。
 
 ---
 
@@ -118,7 +118,7 @@ flowchart TD
     end
 
     subgraph L1["数据与工具"]
-        MODELS["models.py<br/>User ORM"]
+        MODELS["models.py<br/>User / Product ORM"]
         SECURITY["security.py<br/>密码哈希 / JWT"]
         EXCEPTIONS["exceptions.py<br/>业务异常"]
     end
@@ -184,15 +184,17 @@ flowchart TD
 | --- | --- | --- | --- |
 | `config.py` | 无 | `database`、`security`、`logging_config`、`main`、`routers/auth`、`routers/health` | `.env` |
 | `logging_config.py` | `config` | `main` | Python logging |
-| `exceptions.py` | 无 | `services/auth_service`、`main` | 无 |
-| `schemas.py` | 无 | `routers/auth`、`routers/users` | Pydantic |
+| `exceptions.py` | 无 | `services/auth_service`、`services/product_service`、`main` | 无 |
+| `schemas.py` | 无 | `routers/auth`、`routers/users`、`routers/products` | Pydantic |
 | `security.py` | `config` | `services/auth_service`、`deps` | PyJWT、pwdlib |
-| `database.py` | `config`（延迟导入 `models`） | `main`、`models`、`deps`、`routers/auth`、`routers/health` | SQLAlchemy、SQLite |
-| `models.py` | `database.Base` | `deps`、`services/auth_service`、`database.init_db` | SQLAlchemy |
+| `database.py` | `config`（延迟导入 `models`） | `main`、`models`、`deps`、`routers/auth`、`routers/health`、`routers/products` | SQLAlchemy、SQLite |
+| `models.py` | `database.Base` | `deps`、`services/auth_service`、`services/product_service`、`database.init_db` | SQLAlchemy |
 | `deps.py` | `database`、`models`、`security` | `routers/users` | FastAPI、SQLAlchemy |
 | `services/auth_service.py` | `models`、`security`、`exceptions` | `routers/auth` | SQLAlchemy |
+| `services/product_service.py` | `models`、`exceptions` | `routers/products` | SQLAlchemy |
 | `routers/auth.py` | `config`、`database`、`schemas`、`services` | `main` | FastAPI |
 | `routers/users.py` | `deps`、`schemas` | `main` | FastAPI |
+| `routers/products.py` | `database`、`schemas`、`services` | `main` | FastAPI |
 | `routers/health.py` | `config`、`database` | `main` | FastAPI、SQLAlchemy |
 | `main.py` | `config`、`database`、`exceptions`、`logging_config`、`routers/*` | Uvicorn | FastAPI |
 
@@ -216,7 +218,7 @@ uvicorn app.main:app
   │    ├─ setup_logging() → 读 config，配置日志
   │    ├─ get_settings() → 读 .env，得到配置对象
   │    ├─ 创建 FastAPI app
-  │    ├─ include_router(health / auth / users)
+  │    ├─ include_router(health / auth / users / products)
   │    │     └─ 导入 routers → services → models → database
   │    └─ 注册 AppError 异常处理器
   │
@@ -467,25 +469,28 @@ routers/health.py
 
 ---
 
-## 13. 下一步会怎么长
+## 13. 商品模块加入后
 
-商品模块会按同样的模式增加：
+商品模块已经按同样的模式加入：
 
 ```text
 models.py           + Product
-schemas.py          + ProductOut / ProductCreate
+schemas.py          + ProductOut / ProductListResponse
 services/           + product_service.py
 routers/            + products.py
+seed.py             插入示例商品
 main.py             include_router(products.router)
 ```
 
-依赖方向不会变：
+依赖方向没有变：
 
 ```text
 routers/products.py → product_service → models.Product → database → SQLite
 ```
 
-再下一步加 Redis 时，只会在 `services` 和新增的 `cache.py` 之间增加依赖，Router 和 Model 都不需要知道缓存的存在。
+商品接口是公开的，不经过 `deps.py`；它使用 `get_db` 获取 Session，但不要求登录。
+
+下一步加 Redis 时，只会在 `product_service` 和新增的 `cache.py` 之间增加依赖，Router、Schema、Model 都不需要知道缓存的存在。
 
 ---
 

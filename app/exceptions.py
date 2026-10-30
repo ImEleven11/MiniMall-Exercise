@@ -20,3 +20,9 @@ class InvalidCredentialsError(AppError):
     status_code = 401
     code = "INVALID_CREDENTIALS"
     message = "用户名或密码错误"
+
+
+class ProductNotFoundError(AppError):
+    status_code = 404
+    code = "PRODUCT_NOT_FOUND"
+    message = "商品不存在或已下架"
